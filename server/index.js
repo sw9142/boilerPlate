@@ -2,8 +2,12 @@ const express = require("express");
 const dotenv = require("dotenv");
 const mongoose = require("mongoose");
 const app = express();
+const bcrypt = require("bcrypt");
 const config = require("./config/key");
+const jwt = require("jsonwebtoken");
 const UserModel = require("./models/User");
+const auth = require("./middleware/auth");
+const cookieParser = require("cookie-parser");
 const bodyParser = require("body-parser");
 dotenv.config({ path: "./config/keys.env" });
 
@@ -17,6 +21,7 @@ mongoose
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
+app.use(cookieParser());
 
 app.get("/", (req, res) => {
   res.send("react_john");
@@ -71,6 +76,63 @@ app.post("/register", (req, res) => {
       });
     });
   }
+});
+
+app.post("/login", (req, res) => {
+  const { email, password } = req.body;
+
+  UserModel.findOne({ email: email }).then((user) => {
+    if (user) {
+      bcrypt
+        .compare(password, user.password)
+        .then((isMatched) => {
+          //isMatched => generate token
+          if (isMatched) {
+            var _token = jwt.sign(user._id.toHexString(), "secretToken");
+
+            UserModel.updateOne(
+              { email: email },
+              {
+                $set: { token: _token },
+              }
+            )
+              .exec()
+              .then(() => {
+                //save the token in the cookie
+                res
+                  .cookie("x_auth", user.token)
+                  .status(200)
+                  .json({ loginSuccess: true, userId: user._id });
+              });
+          }
+        })
+        .catch((err) => {
+          return res.status(404).send(err);
+        });
+    }
+  });
+});
+
+app.get("/auth", auth, (req, res) => {
+  res.status(200).json({
+    _id: req.user._id,
+    isAdmin: req.user.role === 0 ? false : true,
+    isAuth: true,
+    email: req.user.email,
+    name: req.user.name,
+    role: req.user.role,
+  });
+});
+
+app.get("/logout", auth, (req, res) => {
+  UserModel.findOneAndUpdate({ _id: req.user._id }, { token: "" })
+    .exec()
+    .then(() => {
+      res.send("success!");
+    })
+    .catch((err) => {
+      res.json({ success: false, err });
+    });
 });
 
 const HTTP_PORT = process.env.PORT;
