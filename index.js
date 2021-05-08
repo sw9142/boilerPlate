@@ -14,6 +14,7 @@ mongoose
 
 app.get("/", (req, res) => {
   res.send("hi");
+  console.log("connect?");
 });
 
 const HTTP_PORT = process.env.PORT;
